@@ -1,6 +1,6 @@
-import { Controller, Post, Body, Get, Query, UseGuards } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
-import { AiService, ConsultantMessage } from './ai.service';
+import { Controller, Post, Body } from '@nestjs/common';
+import { ApiTags, ApiOperation } from '@nestjs/swagger';
+import { AiService } from './ai.service';
 import { Throttle } from '@nestjs/throttler';
 
 import { ChatDto }     from './dto/chat.dto'
