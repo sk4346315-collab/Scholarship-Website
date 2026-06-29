@@ -1,0 +1,343 @@
+// NEXUS SCHOLAR — Database Schema
+// Run: npx prisma migrate dev --name init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ═══════════════════════════════════════════════════════
+// SCHOLARSHIPS
+// ═══════════════════════════════════════════════════════
+
+model Scholarship {
+  id                    String   @id @default(cuid())
+  externalId            String?  @unique
+
+  // Identity
+  name                  String
+  slug                  String   @unique
+  shortName             String?
+  localName             String?
+
+  // Host
+  hostUniversity        String?
+  hostCountry           String?
+  hostCountryCode       String?
+
+  // Degree & Fields
+  degreeLevel           String[] // ["bachelor", "master", "phd"]
+  fieldsOfStudy         String[]
+  csRelevant            Boolean  @default(false)
+  csRelevanceScore      Int      @default(0)
+
+  // Funding
+  fundingType           FundingType @default(UNKNOWN)
+  coversTuition         Boolean  @default(false)
+  coversAccommodation   Boolean  @default(false)
+  coversStipend         Boolean  @default(false)
+  coversAirfare         Boolean  @default(false)
+  coversHealthInsurance Boolean  @default(false)
+  coversVisa            Boolean  @default(false)
+  monthlyStipendAmount  Float?
+  monthlyStipendCurrency String?
+  tuitionCoveragePct    Int?
+
+  // Language Requirements — CRITICAL FIELDS
+  requiresIelts         Boolean  @default(false)
+  requiresToefl         Boolean  @default(false)
+  requiresDuolingo      Boolean  @default(false)
+  requiresSat           Boolean  @default(false)
+  acceptsMoi            Boolean  @default(false) // Medium of Instruction letter
+  acceptsEnglishCert    Boolean  @default(false) // English proficiency cert
+  acceptsIeltsWaiver    Boolean  @default(false)
+  ieltsMinScore         Float?
+  toeflMinScore         Int?
+  duolingoMinScore      Int?
+  englishReqDetail      String?
+
+  // Eligibility
+  eligibleNationalities String[] // ["PK", "BD", "NG"] or ["OPEN"]
+  minGpa                Float?
+  maxAgeLimit           Int?
+  requiresWorkExperience Boolean @default(false)
+
+  // Dates
+  applicationOpenDate   DateTime?
+  applicationDeadline   DateTime?
+  resultsDate           DateTime?
+  programStartDate      DateTime?
+  cycleFrequency        String?  // "annual" | "biannual" | "rolling"
+  nextCycleEstimated    DateTime?
+
+  // URLs
+  officialSourceUrl     String
+  applicationUrl        String?
+  infoPageUrl           String?
+  contactEmail          String?
+
+  // Display
+  ieltsNote             String?
+  keyBenefit            String?
+
+  // Scoring
+  suitabilityScore      Float?
+  competitivenessLevel  String?  // "low" | "medium" | "high" | "extremely_high"
+  estimatedAwards       Int?
+  acceptanceRatePct     Float?
+  tier                  String   @default("GAMMA") // "ALPHA" | "BETA" | "GAMMA"
+
+  // Data Quality
+  dataConfidenceScore   Int      @default(0)  // 0-100
+  verificationStatus    VerificationStatus @default(PENDING)
+  lastVerifiedAt        DateTime?
+  lastScrapedAt         DateTime?
+  sourceHash            String?
+
+  // Status
+  status                ScholarshipStatus @default(ACTIVE)
+  isPublished           Boolean  @default(false)
+  featured              Boolean  @default(false)
+
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  // Relations
+  verifications         ScholarshipVerification[]
+  changes               ScholarshipChange[]
+  userApplications      UserApplication[]
+
+  @@index([applicationDeadline])
+  @@index([hostCountryCode])
+  @@index([suitabilityScore(sort: Desc)])
+  @@index([status, isPublished])
+  @@index([fundingType])
+  @@index([requiresIelts])
+  @@index([acceptsMoi])
+  @@index([tier])
+}
+
+enum FundingType {
+  FULLY_FUNDED
+  TUITION_STIPEND
+  TUITION_ONLY
+  PARTIAL
+  UNKNOWN
+}
+
+enum VerificationStatus {
+  PENDING
+  VERIFIED
+  PARTIALLY_VERIFIED
+  UNVERIFIED
+  FLAGGED
+}
+
+enum ScholarshipStatus {
+  ACTIVE
+  CLOSED
+  ARCHIVED
+  DRAFT
+}
+
+// ═══════════════════════════════════════════════════════
+// VERIFICATION AUDIT TRAIL
+// ═══════════════════════════════════════════════════════
+
+model ScholarshipVerification {
+  id              String   @id @default(cuid())
+  scholarshipId   String
+  scholarship     Scholarship @relation(fields: [scholarshipId], references: [id], onDelete: Cascade)
+  verifiedAt      DateTime @default(now())
+  verifiedBy      String   // "system_ai" | "admin_human" | "auto_check"
+  sourceUrl       String
+  sourceHttpStatus Int?
+  sourceContentHash String?
+  extractedData   Json?
+  previousData    Json?
+  confidenceScore Int?
+  changesDetected Json?
+  verificationResult String? // "confirmed" | "changed" | "unreachable" | "removed"
+  notes           String?
+}
+
+// ═══════════════════════════════════════════════════════
+// CHANGE LOG
+// ═══════════════════════════════════════════════════════
+
+model ScholarshipChange {
+  id              String   @id @default(cuid())
+  scholarshipId   String
+  scholarship     Scholarship @relation(fields: [scholarshipId], references: [id], onDelete: Cascade)
+  changedAt       DateTime @default(now())
+  changedBy       String
+  fieldName       String
+  oldValue        String?
+  newValue        String?
+  changeSignificance String? // "critical" | "high" | "medium" | "low"
+  notifiedUsers   Boolean  @default(false)
+}
+
+// ═══════════════════════════════════════════════════════
+// USERS
+// ═══════════════════════════════════════════════════════
+
+model User {
+  id                String   @id @default(cuid())
+  email             String   @unique
+  emailVerified     Boolean  @default(false)
+  passwordHash      String?
+  googleId          String?
+
+  // Profile
+  fullName          String?
+  nationality       String?  // ISO 3166-1 alpha-2 (e.g. "PK")
+  currentCountry    String?
+  dateOfBirth       DateTime?
+
+  // Academic
+  highestEducation  String?
+  currentGpa        Float?
+  gpaScale          Float?
+  graduationYear    Int?
+  schoolLanguage    String?  // Language of instruction
+
+  // Language scores
+  hasIelts          Boolean  @default(false)
+  ieltsScore        Float?
+  hasToefl          Boolean  @default(false)
+  toeflScore        Int?
+  hasMoi            Boolean  @default(false) // Medium of Instruction letter
+  hasEnglishCert    Boolean  @default(false)
+
+  // Preferences
+  preferredCountries String[]
+  preferredFields   String[]
+  fundingPreference String?
+
+  // Account
+  plan              String   @default("free")
+  notificationPrefs Json     @default("{}")
+  timezone          String   @default("UTC")
+  language          String   @default("en")
+  isActive          Boolean  @default(true)
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  lastLoginAt       DateTime?
+
+  // Relations
+  applications      UserApplication[]
+  documents         UserDocument[]
+  consultations     AiConsultation[]
+}
+
+// ═══════════════════════════════════════════════════════
+// APPLICATION TRACKING
+// ═══════════════════════════════════════════════════════
+
+model UserApplication {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  scholarshipId   String?
+  scholarship     Scholarship? @relation(fields: [scholarshipId], references: [id], onDelete: SetNull)
+
+  status          ApplicationStatus @default(INTERESTED)
+  statusUpdatedAt DateTime @default(now())
+  submissionDate  DateTime?
+  interviewDate   DateTime?
+  decisionDate    DateTime?
+
+  docsChecklist   Json     @default("{}")
+  docsCompletePct Int      @default(0)
+  userNotes       String?
+  essayDraft      String?
+
+  reminderSettings Json    @default("{}")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([userId, scholarshipId])
+}
+
+enum ApplicationStatus {
+  INTERESTED
+  PLANNING
+  PREPARING_DOCUMENTS
+  SUBMITTED
+  INTERVIEW
+  ACCEPTED
+  REJECTED
+  WAITLISTED
+  WITHDRAWN
+}
+
+// ═══════════════════════════════════════════════════════
+// DOCUMENTS
+// ═══════════════════════════════════════════════════════
+
+model UserDocument {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  docType         String   // "passport" | "transcript" | "diploma" | "moi_cert" | "cv" | ...
+  docName         String
+  s3Key           String
+  fileSizeBytes   Int?
+  mimeType        String?
+  version         Int      @default(1)
+  isCurrentVersion Boolean @default(true)
+  issueDate       DateTime?
+  expiryDate      DateTime?
+  issuingAuthority String?
+  aiQualityScore  Int?
+  aiIssues        Json?
+  aiSuggestions   String?
+  verified        Boolean  @default(false)
+  createdAt       DateTime @default(now())
+}
+
+// ═══════════════════════════════════════════════════════
+// AI CONSULTATIONS
+// ═══════════════════════════════════════════════════════
+
+model AiConsultation {
+  id              String   @id @default(cuid())
+  userId          String?
+  user            User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  sessionId       String
+  role            String   // "user" | "assistant"
+  content         String   @db.Text
+  scholarshipsCited String[]
+  sourcesCited    String[]
+  containsVerifiedInfo Boolean @default(true)
+  flaggedForReview Boolean @default(false)
+  createdAt       DateTime @default(now())
+}
+
+// ═══════════════════════════════════════════════════════
+// SCRAPING SOURCES
+// ═══════════════════════════════════════════════════════
+
+model ScrapingSource {
+  id                  String   @id @default(cuid())
+  url                 String   @unique
+  domain              String?
+  sourceType          String?  // "government" | "university" | "embassy" | "org"
+  countryCode         String?
+  priority            Int      @default(5)
+  scrapeFrequencyHours Int     @default(24)
+  lastScrapedAt       DateTime?
+  nextScrapeAt        DateTime?
+  consecutiveFailures Int      @default(0)
+  lastSuccessAt       DateTime?
+  avgResponseMs       Int?
+  scraperConfig       Json     @default("{}")
+  isActive            Boolean  @default(true)
+  createdAt           DateTime @default(now())
+}
