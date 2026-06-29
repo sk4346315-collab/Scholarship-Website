@@ -104,7 +104,7 @@ export class AiService {
       });
 
       const text = response.content
-        .filter(b => b.type === 'text')
+        .filter((b): b is Anthropic.TextBlock => b.type === 'text')
         .map(b => b.text)
         .join('');
 
@@ -125,7 +125,7 @@ export class AiService {
     messages: ConsultantMessage[],
     useWebSearch = true,
   ): Promise<string> {
-    const tools: any[] = useWebSearch
+    const tools: Anthropic.Tool[] = useWebSearch
       ? [{ type: 'web_search_20250305', name: 'web_search' }]
       : [];
 
@@ -133,12 +133,12 @@ export class AiService {
       model: 'claude-sonnet-4-6',
       max_tokens: 1024,
       system: CONSULTANT_SYSTEM,
-      ...(tools.length && { tools }),
+      ...(tools.length ? { tools } : {}),
       messages,
     });
 
     return response.content
-      .filter(b => b.type === 'text')
+      .filter((b): b is Anthropic.TextBlock => b.type === 'text')
       .map(b => b.text)
       .join('');
   }
@@ -161,7 +161,7 @@ export class AiService {
         }],
       });
 
-      const text = response.content.filter(b => b.type === 'text').map(b => b.text).join('');
+      const text = response.content.filter((b): b is Anthropic.TextBlock => b.type === 'text').map(b => b.text).join('');
       const match = text.match(/\{[\s\S]*\}/);
       if (match) return JSON.parse(match[0]);
 
@@ -184,6 +184,6 @@ export class AiService {
       }],
     });
 
-    return response.content.filter(b => b.type === 'text').map(b => b.text).join('');
+    return response.content.filter((b): b is Anthropic.TextBlock => b.type === 'text').map(b => b.text).join('');
   }
 }
